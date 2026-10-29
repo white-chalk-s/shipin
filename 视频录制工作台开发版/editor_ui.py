@@ -9,6 +9,31 @@ from timeline import total_frames, output_to_source
 from annotations import annotation_bounds
 
 
+class TimelineRuler(QWidget):
+    """Time marks use the same width and origin as both timeline tracks."""
+    def __init__(self):
+        super().__init__()
+        self.duration = 0.0
+        self.setFixedHeight(20)
+
+    def set_duration(self, seconds):
+        self.duration = max(0.0, float(seconds))
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setPen(QColor("#748098"))
+        font = painter.font(); font.setPixelSize(10); painter.setFont(font)
+        metrics = painter.fontMetrics()
+        for fraction in (0.0, 1/3, 2/3, 1.0):
+            seconds = self.duration * fraction
+            minutes, seconds = divmod(int(seconds), 60)
+            text = f"{minutes:02d}:{seconds:02d}"
+            x = round(fraction * max(0, self.width() - 1))
+            left = max(0, min(self.width() - metrics.horizontalAdvance(text), x - metrics.horizontalAdvance(text) // 2))
+            painter.drawText(left, 13, text)
+
+
 class TimelineStrip(QWidget):
     seek_requested = Signal(int, int)
 
@@ -356,6 +381,8 @@ def build_editor(editor):
         panel = QScrollArea()
         panel.setObjectName("panelScroll")
         panel.setWidgetResizable(True)
+        widget.setMinimumWidth(0)
+        widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         panel.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         panel.setWidget(widget)
         tabs.addTab(panel, title)
@@ -416,8 +443,11 @@ def build_editor(editor):
     timeline_layout.addLayout(tools)
     editor.timeline_track = TimelineStrip()
     editor.timeline_track.seek_requested.connect(editor._on_timeline_clicked)
-    editor.timeline_ruler = label("", "hint")
-    timeline_layout.addWidget(editor.timeline_ruler)
+    ruler_row = QHBoxLayout(); ruler_row.setSpacing(8)
+    ruler_row.addSpacing(42)
+    editor.timeline_ruler = TimelineRuler()
+    ruler_row.addWidget(editor.timeline_ruler, 1)
+    timeline_layout.addLayout(ruler_row)
     video_row = QHBoxLayout(); video_row.setSpacing(8)
     video_name = label("视频", "hint"); video_name.setFixedWidth(34); video_row.addWidget(video_name)
     video_row.addWidget(editor.timeline_track, 1)
@@ -448,7 +478,8 @@ def build_editor(editor):
     script_layout.addWidget(editor.script_input)
     script_layout.addWidget(label("与录制页共享；创建工程后，稿件及剪辑会自动保存到工程。", "hint"))
 
-    crop_card, crop_layout = card("画面与导出比例", "预览与导出保持一致")
+    crop_card, crop_layout = card("画面与导出比例")
+    crop_layout.setContentsMargins(12, 12, 12, 12)
     editor.crop_card = crop_card
     add_panel(crop_card, "裁剪")
     crop_row = QHBoxLayout()
@@ -459,8 +490,9 @@ def build_editor(editor):
     editor.crop_apply_button.clicked.connect(editor._apply_video_crop)
     editor.crop_reset_button = QPushButton("恢复完整画面")
     editor.crop_reset_button.clicked.connect(editor._reset_video_crop)
-    crop_row.addWidget(editor.crop_start_button); crop_row.addWidget(editor.crop_apply_button); crop_row.addWidget(editor.crop_reset_button)
+    crop_row.addWidget(editor.crop_start_button); crop_row.addWidget(editor.crop_apply_button)
     crop_layout.addLayout(crop_row)
+    crop_layout.addWidget(editor.crop_reset_button)
 
     annotations, annotation_layout = card("画面标注", "选择工具后点击画面添加；点击标注可拖动，拖右下角缩放")
     add_panel(annotations, "标注")
@@ -588,10 +620,12 @@ def build_editor(editor):
     custom_layout = QHBoxLayout(editor.ratio_custom); custom_layout.setContentsMargins(0, 0, 0, 0)
     editor.ratio_width = QSpinBox(); editor.ratio_width.setRange(1, 100); editor.ratio_width.setValue(16)
     editor.ratio_height = QSpinBox(); editor.ratio_height.setRange(1, 100); editor.ratio_height.setValue(9)
-    custom_layout.addWidget(label("宽", "hint")); custom_layout.addWidget(editor.ratio_width)
-    custom_layout.addWidget(label("高", "hint")); custom_layout.addWidget(editor.ratio_height)
+    editor.ratio_width.setMinimumWidth(0); editor.ratio_height.setMinimumWidth(0)
+    custom_layout.addWidget(label("宽", "hint")); custom_layout.addWidget(editor.ratio_width, 1)
+    custom_layout.addWidget(label("高", "hint")); custom_layout.addWidget(editor.ratio_height, 1)
     ratio_apply = QPushButton("应用比例")
     ratio_apply.clicked.connect(lambda: editor._set_presentation(ratio=[editor.ratio_width.value(), editor.ratio_height.value()]))
+    ratio_apply.setText("应用")
     custom_layout.addWidget(ratio_apply); crop_layout.insertWidget(3, editor.ratio_custom)
     editor.fit_combo = QComboBox()
     editor.fit_combo.addItem("完整显示 · 留边", "contain")
@@ -611,7 +645,9 @@ def build_editor(editor):
     editor.ratio_combo.currentIndexChanged.connect(change_ratio)
     editor.fit_combo.currentIndexChanged.connect(lambda _: editor._set_presentation(fit=editor.fit_combo.currentData()))
 
-    stage_page, stage_layout = card("文字样式", "统一应用于所有阶段")
+    stage_page, stage_layout = card("文字样式")
+    stage_layout.setContentsMargins(12, 12, 12, 12)
+    stage_layout.addWidget(label("统一应用于所有阶段", "hint"))
     editor.annotation_card = stage_page
     colors = QHBoxLayout()
     editor.background_button = QPushButton("背景")
@@ -669,7 +705,7 @@ def build_editor(editor):
     QLineEdit { background: #f7f8fa; border: 1px solid #eef0f3; border-radius: 6px; padding: 9px; color: #171a20; }
     QTabWidget#editorTabs QTabBar::tab { background: #e9edf2; color: #6b7280; padding: 9px 18px; border: 0; border-radius: 6px; }
     QTabWidget#editorTabs QTabBar::tab:selected { background: white; color: #2455f5; font-weight: 700; }
-    QPushButton#segmentChoice { background: #f3f5f8; color: #171a20; border: 0; min-height: 28px; }
+    QPushButton#segmentChoice { padding: 5px 3px; background: #f3f5f8; color: #171a20; border: 0; min-height: 28px; }
     QPushButton#segmentChoice:checked { background: #eef2ff; color: #2455f5; font-weight: 700; }
     """)
     editor.editor_stats.hide()

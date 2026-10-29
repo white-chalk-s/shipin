@@ -51,7 +51,7 @@ import mss
 import numpy as np
 from pynput import keyboard
 from PySide6.QtCore import Qt, QRect, QSize, QPoint, QTimer, QEvent, Signal, QObject, QThread
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QAction, QImage, QPixmap, QCursor
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QAction, QImage, QPixmap, QCursor, QIcon
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton, QVBoxLayout,
     QHBoxLayout, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QStyle,
@@ -1604,8 +1604,7 @@ class VideoEditorWindow(QMainWindow):
         kept_frames = sum(max(0, seg["end"] - seg["start"]) for seg in self.segments)
         kept_duration = kept_frames / self.fps
         if hasattr(self, "timeline_ruler"):
-            stamps = [self._format_time(kept_duration * fraction) for fraction in (0, 1/3, 2/3, 1)]
-            self.timeline_ruler.setText("       " + "          ".join(stamps))
+            self.timeline_ruler.set_duration(kept_duration)
         output_position = source_to_output(self.segments, self.current_frame)
         if output_position is None:
             output_position = min(self.timeline_slider.value(), max(0, kept_frames - 1))
@@ -1807,8 +1806,12 @@ class VideoEditorWindow(QMainWindow):
         if hasattr(self, "align_buttons"):
             button = self.align_buttons.button(self.align_combo.currentIndex())
             if button is not None: button.setChecked(True)
-        self.background_button.setText("■  自定义")
-        self.foreground_button.setText("■  自定义")
+        for button, key in ((self.background_button, "background"), (self.foreground_button, "foreground")):
+            swatch = QPixmap(14, 14)
+            swatch.fill(QColor(self.presentation[key]))
+            button.setIcon(QIcon(swatch))
+            button.setText("自定义")
+            button.setToolTip(self.presentation[key])
 
     def _add_annotation_at(self, x, y):
         kind = self.annotation_tool.currentData()
